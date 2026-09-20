@@ -4,8 +4,6 @@ Un réseau de neurones dont **le câblage est celui d'une vraie drosophile**, me
 au microscope électronique, entraîné à jouer à Tetris. La topologie ne bouge
 jamais : seules les forces des connexions sont ajustées.
 
-**[▶ Voir une partie](https://claude.ai/artifact/L1Kxf3anTT3xrXnrK2jkxL)**
-
 ```
 connectome MaleCNS v1.0 · 165 122 neurones tracés · 25 563 197 connexions
 25 728 320 paramètres appris · 0 connexion ajoutée, retirée ou déplacée
