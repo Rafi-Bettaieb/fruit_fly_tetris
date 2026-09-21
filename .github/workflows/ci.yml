@@ -1,0 +1,33 @@
+name: tests
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python: ["3.10", "3.12"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+          cache: pip
+
+      - name: Installer
+        run: pip install -e ".[modeles,dev]"
+
+      - name: Style
+        run: ruff check src tests
+
+      # Contrainte de conception.md §16 : l'intégration continue ne télécharge
+      # jamais le MaleCNS (1,2 Go) et n'a pas de GPU. Les tests qui en ont besoin
+      # portent une marque et sont exclus ici. Si cette ligne change, c'est une
+      # décision, pas un ajustement.
+      - name: Tests
+        run: pytest -m "not connectome and not gpu"

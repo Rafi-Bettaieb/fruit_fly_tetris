@@ -116,6 +116,18 @@ mouche demonstrations     # 410 parties de l'expert, ~101 000 situations
 mouche reperes            # hasard et expert, protocole final
 mouche juge-lineaire      # clonage + DAgger + évaluation
 mouche run-court          # mise au point sur le connectome, 3 valeurs de K
+mouche entrainer-mouche   # le run complet de la mouche : clonage + 3 tours de DAgger
+mouche avancement         # où en est le run, sans toucher à la carte
+mouche diffuser           # la mouche joue en direct sur http://localhost:8000
+```
+
+Le run complet dure environ 7 h 30. Il se découpe en séances, sans rien changer
+au résultat — la reprise est vérifiée bit pour bit :
+
+```bash
+mouche entrainer-mouche --duree 3   # travaille 3 h, enregistre, rend la carte
+mouche entrainer-mouche --duree 3   # reprend exactement là
+mouche entrainer-mouche             # va jusqu'au bout
 ```
 
 ### Matériel
@@ -148,7 +160,7 @@ rétropropager.
 | `src/mouche_tetris/encodage.py` | Les 205 entrées — seule frontière entre moteur et modèles |
 | `src/mouche_tetris/tetris/` | Le moteur, unique moteur du projet |
 | `src/mouche_tetris/connectome/` | Graphe, signes, noyau creux, modèle, contrôles |
-| `src/mouche_tetris/entrainement/` | Démonstrations, clonage, DAgger |
+| `src/mouche_tetris/entrainement/` | Démonstrations, clonage, DAgger, séances |
 | `src/mouche_tetris/evaluation/` | Parties appariées, bootstrap, accord avec l'expert |
 | `web/` | La page de replay |
 

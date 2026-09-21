@@ -1,0 +1,7 @@
+{
+  "_commentaire": "Empreintes SHA-256, verifiees a chaque chargement (conception.md §16). Celles des trois fichiers bruts sont calculees sur les fichiers telecharges le 20 septembre 2026 depuis storage.googleapis.com/flyem-male-cns/v1.0/. A confronter aux valeurs publiees par flyhard des que disponibles.",
+  "annotations": "2177e246113e4cfbf1e7772ec37c6da1955ff22e8063d0b1f833101f99a9a3b2",
+  "neurotransmetteurs": "95c9289220663abeb3409f3ad9e5a7f8a53f8093f5139d15502cd08da8879621",
+  "poids": "e35da783d1c686b2b58b3b87cd6a403ae43bfcfba8bff28e08ef752c1a56afc1",
+  "graphe_prepare": "9cb1ca6eed3a285942ebde689bcdfd443f73f7f41cd7f25f440b201f213dc876"
+}

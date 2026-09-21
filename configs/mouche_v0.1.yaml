@@ -1,0 +1,76 @@
+# La mouche, graine 0 — configuration de référence de la v0.1.
+#
+# Ce fichier est la traduction exécutable du récapitulatif de conception.md §19.
+# Tout réglage du projet vit ici, pas dans un argument de ligne de commande :
+# ce qui est reproductible, c'est le YAML.
+
+nom: mouche_v0.1
+condition: mouche          # mouche | recablee | recablee_signes | reservoir
+                           # lineaire | mlp | convolutif | coupe | aveugle | hasard | expert
+graine_run: 0              # tire aussi les interfaces (§8.3, §10.5)
+
+connectome:
+  neurones_attendus: 165122
+  connexions_attendues: 25563197
+  # Empreinte SHA-256 vérifiée à chaque chargement ; différente de celle publiée
+  # par flyhard ⇒ arrêt (§16). À renseigner en J3.
+  empreinte_graphe: 9cb1ca6eed3a285942ebde689bcdfd443f73f7f41cd7f25f440b201f213dc876
+  signes:
+    acetylcholine: excitateur
+    gaba: inhibiteur
+    glutamate: inhibiteur
+    histamine: inhibiteur
+    autres: excitateur
+    inconnu: excitateur
+  normalisation: synapses_recues   # somme des valeurs absolues = 1 par neurone
+  facteur_global: 24               # mesuré : 92,4 % de moteurs actifs, 0,2 % saturés (§7.4)
+
+modele:
+  entrees: 205
+  neurones_entree: 4114            # lobe optique
+  neurones_sortie: 708             # corde nerveuse ventrale
+  k: 7                             # D = 3 mesuré, donc D + 4 ; plafond de 16 non atteint (§9.4)
+  gain_initial: 1.0                # softplus
+  fuite_initiale: 0.5              # sigmoïde
+  temperature_initiale: 1.0        # softplus
+
+demonstrations:
+  parties: 410
+  graines: [0, 409]
+  plafond_pieces: 300
+  bruit: 0.05
+
+clonage:
+  candidats_par_situation: 10
+  lot: 4
+  optimiseur: adam
+  taux: 0.04
+  mises_a_jour: 2400
+  point_de_controle_tous_les: 200
+  sous_echantillon_accord: 500
+  divergence:
+    hausse_max: 0.5
+    fenetre: 100
+    diviseur_du_taux: 4
+    relances_max: 3
+
+dagger:
+  tours: 3
+  parties_par_tour: 30
+  plafond_pieces: 300
+  mises_a_jour_par_tour: 500
+  graines: [[2000, 2029], [2100, 2129], [2200, 2229]]
+  part_tiree_dans_dagger: 0.5      # l'autre moitié vient des démonstrations (§10.4)
+
+evaluation:
+  developpement: { parties: 30, graines: [1500, 1529], plafond_pieces: 300 }
+  finale: { parties: 100, graines: [1000, 1099], plafond_pieces: 500 }
+  bootstrap: { tirages: 10000, apparie: true }
+
+materiel:
+  peripherique: cuda
+  memoire_max_go: 4
+  # Parades dans l'ordre si la carte ne suffit pas (§14.5). Jamais de
+  # pré-filtrage des candidats par l'expert : c'est la règle absolue.
+  parades_memoire: [candidats_6, poids_demi_precision, lot_2]
+  parades_duree: [clonage_1200, dagger_20_parties, graines_0_et_1]

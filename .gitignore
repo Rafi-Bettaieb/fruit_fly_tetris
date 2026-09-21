@@ -1,0 +1,40 @@
+# --- Données : jamais dans git ---
+# Le MaleCNS brut pèse 1,2 Go, les points de contrôle 0,31 Go par sauvegarde,
+# les enregistrements 10 Mo par partie (conception.md §4.3, §15).
+# `!data/**/` est indispensable : sans lui, git n'entre pas dans les
+# sous-dossiers exclus et les négations qui suivent ne sont jamais évaluées.
+data/**
+!data/**/
+!data/**/.gitkeep
+!data/empreintes.json
+
+# --- Dépôts de référence, clonés pour lecture ---
+# Le noyau creux en est recopié dans src/mouche_tetris/connectome/noyau.py, avec
+# son attribution ; rien n'importe ces dossiers. Pour les retrouver :
+#   git clone https://github.com/MarkUnthank/flyhard && git -C flyhard checkout 328906f
+#   git clone https://github.com/suanmiao/fly-self-driving && git -C fly-self-driving checkout 3516a09
+vendor/flyhard/
+vendor/fly-self-driving/
+
+# --- Sorties d'expériences ---
+mlruns/
+*.ckpt
+*.pt
+*.pth
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+build/
+dist/
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# --- Environnement ---
+.env
+.DS_Store
