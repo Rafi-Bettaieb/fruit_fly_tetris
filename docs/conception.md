@@ -565,6 +565,18 @@ L'intervalle exclut zéro : la recette corrigée devient celle du projet. Le run
 
 L'échantillon de 500 surestimait les deux modèles — 55,0 et 60,0 % contre 53,9 et 57,2 % sur le jeu complet — ce qui est attendu d'un meilleur point choisi sur ce même échantillon : c'est pourquoi la décision se prend sur le jeu complet.
 
+**Troisième correction essayée, non retenue : les concurrents difficiles.** Au lieu de 9 concurrents tirés au hasard, les 9 que le modèle note le plus haut — ses propres confusions (`--tirage difficiles`), pour 10 % de temps en plus par pas. Même protocole, contre la recette corrigée :
+
+| 800 pas, graine 0 | Recette corrigée | + concurrents difficiles |
+|---|---|---|
+| Accord, échantillon de 500 (meilleur point) | 60,0 % | 57,2 % |
+| **Accord, jeu de test complet** | **57,2 %** | **57,5 %** |
+| Écart, IC à 95 % tiré par parties | | **+0,3 point [−1,2 ; +1,7]** |
+
+Pas d'écart démontré : la recette corrigée reste celle du projet, concurrents tirés au hasard. Deux enseignements au passage. La référence, remesurée, redonne **exactement** 57,2 % — la mesure est reproductible au chiffre près. Et l'échantillon de 500 donnait l'essai perdant de 2,8 points là où le jeu complet le met à égalité : trancher sur l'échantillon aurait conduit à une conclusion fausse, dans un sens comme dans l'autre.
+
+**Recette du projet, à partir d'ici :** perte sur les optimaux de l'expert, taux de 0,04 décroissant en cosinus jusqu'à 0,004, concurrents tirés au hasard. Elle vaut pour toutes les conditions.
+
 ### 10.4 DAgger
 
 - **Trois tours.** Graines 2000–2029, puis 2100–2129, puis 2200–2229.

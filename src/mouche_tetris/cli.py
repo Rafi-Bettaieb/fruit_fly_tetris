@@ -366,7 +366,8 @@ def commande_entrainer_mouche(args) -> int:
     if session is None:
         session = reprise.Session(graine_run=args.graine, budget_clonage=pas,
                                   avec_dagger=not args.sans_dagger,
-                                  perte=args.perte or "choix", taux_final=args.taux_final)
+                                  perte=args.perte or "choix", taux_final=args.taux_final,
+                                  tirage=args.tirage or "hasard")
     elif args.pas is not None and session.budget_clonage != pas:
         # Un run à moitié fait sous 2 400 pas et terminé sous 1 200 ne serait ni
         # l'un ni l'autre, et son budget publié serait faux.
@@ -375,10 +376,11 @@ def commande_entrainer_mouche(args) -> int:
         print("  reprendre sans --pas, ou --recommencer pour repartir de zéro")
         return 1
     elif ((args.perte is not None and args.perte != session.perte)
-          or (args.taux_final is not None and args.taux_final != session.taux_final)):
-        print(f"la séance en cours suit la recette « perte {session.perte}, "
-              f"taux final {session.taux_final} » : on ne change pas de recette en route.")
-        print("  reprendre sans --perte ni --taux-final, ou --recommencer")
+          or (args.taux_final is not None and args.taux_final != session.taux_final)
+          or (args.tirage is not None and args.tirage != session.tirage)):
+        print(f"la séance en cours suit la recette {reprise.recette(session)} : "
+              f"on ne change pas de recette en route.")
+        print("  reprendre sans --perte, --taux-final ni --tirage, ou --recommencer")
         return 1
     if session.terminee:
         print(session.avancement())
@@ -411,9 +413,9 @@ def commande_entrainer_mouche(args) -> int:
                   f"contrôle qui tient dedans")
         print()
 
-        recette = {"perte": session.perte, "taux_final": session.taux_final}
-        if recette != {"perte": "choix", "taux_final": None}:
-            print(f"  recette : perte « {session.perte} », taux final {session.taux_final}")
+        recette = reprise.recette(session)
+        if recette != {"perte": "choix", "taux_final": None, "tirage": "hasard"}:
+            print(f"  recette : {recette}")
         reglages = clonage.Reglages(
             mises_a_jour=session.budget_clonage,
             # 12 points de contrôle pour les 2 400 pas du document (§14.3), donc
@@ -469,18 +471,18 @@ def commande_entrainer_mouche(args) -> int:
 
 
 REFERENCE_RECETTE = Path("data/points_de_controle/reference-recette-document-800pas.pt")
-SEANCE_ESSAI = Path("data/points_de_controle/seance-essai-recette.pt")
-RESULTAT_ESSAI = Path("data/resultats/comparaison-recettes.json")
 
 
 def commande_comparer_recettes(args) -> int:
-    """L'essai de §10.3 : les deux corrections contre la recette du document.
+    """Un essai de recette contre un modèle de référence, à budget égal (§10.3).
 
-    **À budget égal.** Référence : le meilleur point des 800 premiers pas du run
-    en recette du document — 55,0 % d'accord sur l'échantillon, extrait du
-    fichier de séance avant que les pas suivants ne le remplacent. Essai : 800
-    pas, même graine, perte sur les optimaux de l'expert et taux décroissant de
-    0,04 à 0,004, meilleur point choisi de la même façon sur le même échantillon.
+    **À budget égal.** La référence est un meilleur point déjà entraîné — par
+    défaut celui des 800 premiers pas du run en recette du document, 55,0 %
+    d'accord sur l'échantillon. L'essai s'entraîne autant de pas, même graine,
+    dans la recette donnée par `--perte`, `--taux-final` et `--tirage`, et son
+    meilleur point est choisi de la même façon, sur le même échantillon, aux
+    mêmes pas. Chaque recette essayée a ses propres fichiers : un essai ne
+    reprend ni n'écrase jamais celui d'une autre.
 
     **Mesuré sur tout le jeu de test**, environ 6 000 situations, et situation par
     situation : les deux modèles voient les mêmes grilles. L'échantillon de 500
@@ -509,13 +511,19 @@ def commande_comparer_recettes(args) -> int:
     if not torch.cuda.is_available():
         print("CUDA indisponible — voir « mouche entrainer-mouche » pour le rétablir.")
         return 1
-    if not REFERENCE_RECETTE.exists():
-        print(f"{REFERENCE_RECETTE} : référence absente, rien à comparer")
+    chemin_reference = Path(args.reference) if args.reference else REFERENCE_RECETTE
+    if not chemin_reference.exists():
+        print(f"{chemin_reference} : référence absente, rien à comparer")
         return 1
-    reference = torch.load(REFERENCE_RECETTE, map_location="cpu", weights_only=False)
+    reference = torch.load(chemin_reference, map_location="cpu", weights_only=False)
     pas = reference["pas"]
-    taux_final = args.taux_final if args.taux_final is not None else 0.004
-    chemin_seance = Path(args.seance) if args.seance else SEANCE_ESSAI
+    recette = {"perte": args.perte or "optimaux",
+               "taux_final": args.taux_final if args.taux_final is not None else 0.004,
+               "tirage": args.tirage or "hasard"}
+    nom_essai = f"{recette['perte']}-{recette['taux_final']}-{recette['tirage']}"
+    chemin_seance = (Path(args.seance) if args.seance
+                     else Path(f"data/points_de_controle/seance-essai-{nom_essai}.pt"))
+    chemin_resultat = Path(f"data/resultats/comparaison-{nom_essai}.json")
 
     try:
         verrou_gpu.prendre("entrainement", prioritaire=True)
@@ -534,11 +542,10 @@ def commande_comparer_recettes(args) -> int:
 
         session = reprise.charger(chemin_seance) or reprise.Session(
             graine_run=reference["graine_run"], budget_clonage=pas, avec_dagger=False,
-            perte="optimaux", taux_final=taux_final)
+            **recette)
         print(f"référence : {reference['recette']} — {pas} pas, "
               f"{reference['accord_echantillon']:.1%} sur l'échantillon")
-        print(f"essai     : perte « {session.perte} », taux 0,04 → {session.taux_final} — "
-              f"{session.avancement()}\n")
+        print(f"essai     : {reprise.recette(session)} — {session.avancement()}\n")
 
         if not session.terminee:
             # Les mêmes points de contrôle que la référence, pas ceux que donnerait
@@ -549,7 +556,7 @@ def commande_comparer_recettes(args) -> int:
             intervalle = reference["accords"][0][0]
             reglages = clonage.Reglages(
                 mises_a_jour=pas, point_de_controle_tous_les=intervalle,
-                perte=session.perte, taux_final=session.taux_final)
+                **reprise.recette(session))
             print(f"  points de contrôle tous les {intervalle} pas, comme la référence : "
                   f"{[p for p, _ in reference['accords']]}")
             mouche, session = reprise.poursuivre(
@@ -563,8 +570,12 @@ def commande_comparer_recettes(args) -> int:
         if session.phase == "echoue":
             print("essai échoué (règle de divergence) — publié comme tel")
             return 1
-        torch.save(session.parametres,
-                   Path("data/points_de_controle") / f"essai-recette-{pas}pas.pt")
+        torch.save({
+            "parametres": session.parametres, "pas": pas, "graine_run": session.graine_run,
+            "accord_echantillon": max(a for _, a in session.historique[-1][1].accords),
+            "accords": session.historique[-1][1].accords,
+            "recette": f"essai {reprise.recette(session)}",
+        }, Path("data/points_de_controle") / f"essai-{nom_essai}-{pas}pas.pt")
 
         # Les parties du jeu de test, pour tirer l'intervalle par parties entières.
         par_partie = [len(d.generer_partie(g, bruit=0.0)) for g in graines.TEST]
@@ -575,7 +586,7 @@ def commande_comparer_recettes(args) -> int:
         print(f"\nmesure sur tout le jeu de test : {len(test)} situations, "
               f"{len(par_partie)} parties")
         justes = {}
-        for nom, parametres in (("document", reference["parametres"]),
+        for nom, parametres in (("reference", reference["parametres"]),
                                 ("essai", session.parametres)):
             clonage.restaurer_parametres(mouche, parametres)
             debut = time.perf_counter()
@@ -583,27 +594,27 @@ def commande_comparer_recettes(args) -> int:
             print(f"  {nom:<9} accord {justes[nom].mean():.1%} "
                   f"({(time.perf_counter() - debut) / 60:.0f} min)", flush=True)
 
-        ecart = difference_appariee_par_groupes(justes["essai"], justes["document"], groupes)
+        ecart = difference_appariee_par_groupes(justes["essai"], justes["reference"], groupes)
         if ecart.bas > 0:
             conclusion = "gain démontré : l'intervalle exclut zéro"
         elif ecart.haut < 0:
             conclusion = "perte démontrée : l'intervalle exclut zéro"
         else:
             conclusion = "pas d'écart démontré : l'intervalle contient zéro"
-        print(f"\nécart essai − document : {ecart.valeur * 100:+.1f} points "
+        print(f"\nécart essai − référence : {ecart.valeur * 100:+.1f} points "
               f"[{ecart.bas * 100:+.1f} ; {ecart.haut * 100:+.1f}], IC à 95 % par parties")
         print(f"  {conclusion}")
 
-        RESULTAT_ESSAI.parent.mkdir(parents=True, exist_ok=True)
-        RESULTAT_ESSAI.write_text(json.dumps({
+        chemin_resultat.parent.mkdir(parents=True, exist_ok=True)
+        chemin_resultat.write_text(json.dumps({
             "pas": pas,
             "graine_run": reference["graine_run"],
             "recettes": {
-                "document": reference["recette"],
-                "essai": f"perte « {session.perte} », taux 0,04 → {session.taux_final} en cosinus",
+                "reference": f"{reference['recette']} ({chemin_reference.name})",
+                "essai": f"{reprise.recette(session)}, taux 0,04 → final en cosinus",
             },
             "accord_echantillon_500": {
-                "document": reference["accords"],
+                "reference": reference["accords"],
                 "essai": session.historique[-1][1].accords if session.historique else [],
             },
             "jeu_de_test": {"situations": len(test), "parties": len(par_partie)},
@@ -612,7 +623,7 @@ def commande_comparer_recettes(args) -> int:
                              "haut": ecart.haut * 100},
             "conclusion": conclusion,
         }, ensure_ascii=False, indent=2), encoding="utf-8")
-        print(f"  résultat écrit dans {RESULTAT_ESSAI}")
+        print(f"  résultat écrit dans {chemin_resultat}")
     finally:
         verrou_gpu.rendre()
     return 0
@@ -740,6 +751,11 @@ def main(argv: list[str] | None = None) -> int:
                            help="cible de la perte (défaut : « choix », recette du document)")
     analyseur.add_argument("--taux-final", type=float, default=None,
                            help="décroissance du taux jusqu'à cette valeur (défaut : constant)")
+    analyseur.add_argument("--tirage", choices=("hasard", "difficiles"), default=None,
+                           help="concurrents du choix de l'expert (défaut : « hasard »)")
+    analyseur.add_argument("--reference", default=None,
+                           help="comparer-recettes : modèle de référence "
+                                "(défaut : recette du document)")
     analyseur.add_argument("--plafond", type=int, default=300,
                            help="plafond de pièces enregistrées")
     analyseur.add_argument("--modele", help="point de contrôle à diffuser")

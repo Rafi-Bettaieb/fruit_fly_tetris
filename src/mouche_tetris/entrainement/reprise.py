@@ -73,7 +73,8 @@ class Session:
     avec_dagger: bool = True
     perte: str = "choix"
     taux_final: float | None = None
-    """La recette (`Reglages.perte`, `Reglages.taux_final`), pour la même raison
+    tirage: str = "hasard"
+    """La recette (`Reglages.perte`, `taux_final`, `tirage`), pour la même raison
     que le budget : une reprise sous une autre recette donnerait un modèle qui
     n'aurait suivi aucune des deux. Des valeurs par défaut simples, et non des
     fabriques : un fichier de séance écrit avant l'ajout de ces champs les
@@ -129,6 +130,11 @@ class Session:
                   if self.meilleur_accord >= 0 else "")
         return (f"{self.phase} {fait}/{total} pas{accord} · "
                 f"{self.secondes / 3600:.1f} h de carte sur {self.seances} séances")
+
+
+def recette(session: Session) -> dict:
+    """Les réglages de recette d'une séance, prêts pour `Reglages(**…)`."""
+    return {"perte": session.perte, "taux_final": session.taux_final, "tirage": session.tirage}
 
 
 def sauvegarder(session: Session, chemin: Path = CHEMIN) -> Path:
@@ -209,12 +215,12 @@ def poursuivre(
     s'arrête au dernier point de contrôle qui tient dans le temps imparti, après
     avoir tout enregistré.
     """
-    reglages = reglages or Reglages(mises_a_jour=session.budget_clonage,
-                                    perte=session.perte, taux_final=session.taux_final)
-    if (reglages.perte, reglages.taux_final) != (session.perte, session.taux_final):
+    reglages = reglages or Reglages(mises_a_jour=session.budget_clonage, **recette(session))
+    fournie = {"perte": reglages.perte, "taux_final": reglages.taux_final,
+               "tirage": reglages.tirage}
+    if fournie != recette(session):
         raise ValueError(
-            f"recette de la séance : perte « {session.perte} », taux final {session.taux_final} ; "
-            f"réglages fournis : « {reglages.perte} », {reglages.taux_final}")
+            f"recette de la séance : {recette(session)} ; réglages fournis : {fournie}")
     debut_seance = time.perf_counter()
     session.seances += 1
 

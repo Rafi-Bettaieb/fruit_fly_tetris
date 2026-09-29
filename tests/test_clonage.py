@@ -230,3 +230,49 @@ def test_une_relance_divise_aussi_le_taux_decroissant():
     reglages = clonage.Reglages(mises_a_jour=800, taux_final=0.004)
     assert clonage.taux_du_pas(reglages, 200, relances=1) == pytest.approx(
         clonage.taux_du_pas(reglages, 200) / 4)
+
+
+# --- Concurrents difficiles ------------------------------------------------
+
+
+def test_les_concurrents_difficiles_sont_les_mieux_notes_par_le_modele(situations):
+    """La cible de l'expert, plus les 9 autres que le modèle note le plus haut."""
+    situation = next(s for s in situations if len(s.candidats) > 20)
+    generateur = graines.generateur_run(0)
+    notes = np.arange(len(situation.candidats), dtype=float)[::-1].copy()  # 0 le mieux noté
+    tires, cible = d.tirer_difficiles(situation, 10, notes, generateur)
+    assert len(tires) == 10
+    assert tires[cible] == situation.candidats[situation.choix_expert]
+    autres = [i for i in range(len(situation.candidats)) if i != situation.choix_expert][:9]
+    assert set(tires) == {situation.candidats[situation.choix_expert]} | {
+        situation.candidats[i] for i in autres}
+
+
+def test_peu_de_candidats_les_garde_tous(situations):
+    situation = next(s for s in situations if len(s.candidats) <= 10)
+    notes = np.zeros(len(situation.candidats))
+    tires, cible = d.tirer_difficiles(situation, 10, notes, graines.generateur_run(0))
+    assert set(tires) == set(situation.candidats)
+    assert tires[cible] == situation.candidats[situation.choix_expert]
+
+
+def test_le_tirage_difficile_exige_les_notes_du_modele(situations):
+    reglages = clonage.Reglages(lot=4, tirage="difficiles")
+    with pytest.raises(ValueError, match="notes du modèle"):
+        clonage.preparer_lot(situations[:4], reglages, graines.generateur_run(0))
+
+
+def test_le_tirage_difficile_suit_les_notes_du_modele(situations):
+    torch.manual_seed(0)
+    modele = JugeLineaire()
+    lot = [s for s in situations if len(s.candidats) > 15][:4]
+    notes = clonage.noter_tous_les_candidats(modele, lot)
+    assert [len(n) for n in notes] == [len(s.candidats) for s in lot]
+    reglages = clonage.Reglages(lot=4, tirage="difficiles")
+    _, masque, _, _ = clonage.preparer_lot(lot, reglages, graines.generateur_run(0), notes=notes)
+    assert masque.sum(dim=1).tolist() == [10, 10, 10, 10]
+
+
+def test_un_tirage_inconnu_est_refuse():
+    with pytest.raises(ValueError, match="inconnu"):
+        clonage.Reglages(tirage="autre")

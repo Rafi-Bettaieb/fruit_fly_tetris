@@ -147,3 +147,30 @@ def tirer_candidats(
         retenus = [situation.choix_expert] + [autres[i] for i in tires]
         generateur.shuffle(retenus)
     return [situation.candidats[i] for i in retenus], retenus.index(situation.choix_expert)
+
+
+def tirer_difficiles(
+    situation: Situation, combien: int, notes: np.ndarray, generateur: np.random.Generator
+) -> tuple[list[Candidat], int]:
+    """Le choix de l'expert, plus les `combien − 1` autres que le **modèle** note le plus haut.
+
+    Les concurrents tirés au hasard sont souvent des placements absurdes que le
+    modèle écarte déjà : ils n'apprennent presque rien. L'accord, lui, se joue
+    entre le choix de l'expert et les meilleurs rivaux du modèle — ses propres
+    confusions. On les lui montre donc à chaque pas.
+
+    **Ce n'est pas un pré-filtrage par l'expert** (§3) : c'est le modèle qui
+    choisit ses concurrents, l'expert ne fournit que la bonne réponse, comme
+    avant. En jeu et en évaluation, le modèle voit toujours tous les candidats.
+    """
+    total = len(situation.candidats)
+    if total <= combien:
+        retenus = list(range(total))
+    else:
+        autres = [i for i in range(total) if i != situation.choix_expert]
+        # Tri stable sur la note, du plus haut au plus bas : à notes égales,
+        # l'ordre d'énumération départage, et le tirage reste reproductible.
+        autres.sort(key=lambda i: -notes[i])
+        retenus = [situation.choix_expert] + autres[: combien - 1]
+    generateur.shuffle(retenus)
+    return [situation.candidats[i] for i in retenus], retenus.index(situation.choix_expert)

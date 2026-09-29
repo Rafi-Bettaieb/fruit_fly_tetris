@@ -369,3 +369,23 @@ def test_on_ne_change_pas_de_recette_en_route(situations, test_situations, tmp_p
         reprise.poursuivre(_modele(), lambda m: NoteurTorch(m, "juge"), situations,
                            test_situations, session, reglages=CORRIGEE,
                            chemin=tmp_path / "s.pt")
+
+
+DIFFICILES = clonage.Reglages(lot=8, taux=0.01, mises_a_jour=40, point_de_controle_tous_les=10,
+                              perte="optimaux", taux_final=0.001, tirage="difficiles")
+
+
+def test_le_tirage_difficile_se_reprend_aussi_exactement(situations, test_situations):
+    """Les concurrents dépendent des notes du modèle, donc de ses paramètres :
+    une reprise exacte des paramètres doit redonner exactement les mêmes lots."""
+    def entrainer(session=None, limite=None):
+        return clonage.entrainer(_modele(), situations, test_situations, DIFFICILES, nom="juge",
+                                 bavard=False, session=session, limite_secondes=limite)
+
+    modele, journal = entrainer()
+    session = reprise.Session(budget_clonage=40, perte="optimaux", taux_final=0.001,
+                              tirage="difficiles")
+    entrainer(session, limite=1e-9)
+    repris, journal_repris = entrainer(session)
+    assert torch.equal(_poids(repris), _poids(modele))
+    assert journal_repris.pertes == journal.pertes

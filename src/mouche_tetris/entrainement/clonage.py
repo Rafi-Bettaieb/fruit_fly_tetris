@@ -64,7 +64,7 @@ from .. import graines
 from ..encodage import TAILLE_ENCODAGE, encoder_lot
 from ..evaluation.accord import accord
 from ..modeles.torche import NoteurTorch
-from .demonstrations import Situation, tirer_candidats
+from .demonstrations import Situation, tirer_candidats, tirer_difficiles
 
 
 @dataclass
@@ -91,10 +91,17 @@ class Reglages:
     taux_final: float | None = None
     """None : taux constant. Sinon, décroissance en cosinus de `taux` à
     `taux_final` sur les `mises_a_jour` pas de la phase."""
+    tirage: str = "hasard"
+    """« hasard » : les concurrents du choix de l'expert sont tirés au hasard.
+    « difficiles » : ce sont ceux que le modèle note le plus haut
+    (`demonstrations.tirer_difficiles`). Coût : un passage avant sans gradient
+    sur tous les candidats du lot, environ un dixième d'un pas."""
 
     def __post_init__(self) -> None:
         if self.perte not in ("choix", "optimaux"):
             raise ValueError(f"perte « {self.perte} » inconnue : « choix » ou « optimaux »")
+        if self.tirage not in ("hasard", "difficiles"):
+            raise ValueError(f"tirage « {self.tirage} » inconnu : « hasard » ou « difficiles »")
 
 
 def taux_du_pas(reglages: Reglages, pas: int, relances: int = 0) -> float:
@@ -206,11 +213,28 @@ def restaurer_parametres(modele: nn.Module, etat: dict[str, torch.Tensor]) -> No
             parametre.copy_(etat[nom].to(parametre.device))
 
 
+@torch.no_grad()
+def noter_tous_les_candidats(modele: nn.Module, situations: list[Situation],
+                             peripherique: str = "cpu") -> list[np.ndarray]:
+    """Les notes du modèle sur tous les candidats de chaque situation, sans gradient.
+
+    Une situation à la fois : 34 candidats au plus, la mémoire d'une pièce en
+    jeu. Tout le lot d'un coup — jusqu'à 136 évaluations — dépasserait ce que la
+    carte peut ajouter à un pas d'entraînement.
+    """
+    return [
+        modele(torch.from_numpy(encoder_lot(s.candidats)).to(peripherique))
+        .reshape(-1).float().cpu().numpy()
+        for s in situations
+    ]
+
+
 def preparer_lot(
     situations: list[Situation],
     reglages: Reglages,
     generateur: np.random.Generator,
     peripherique: str = "cpu",
+    notes: list[np.ndarray] | None = None,
 ):
     """Construit un lot : encodages, masque et cibles.
 
@@ -219,7 +243,14 @@ def preparer_lot(
     grande et l'on masque le reste : les places inventées reçoivent −∞ avant la
     softmax, et ne peuvent donc ni être choisies ni recevoir de gradient.
     """
-    lots = [tirer_candidats(s, reglages.candidats_par_situation, generateur) for s in situations]
+    if reglages.tirage == "difficiles":
+        if notes is None:
+            raise ValueError("tirage « difficiles » : il faut les notes du modèle sur le lot")
+        lots = [tirer_difficiles(s, reglages.candidats_par_situation, n, generateur)
+                for s, n in zip(situations, notes, strict=True)]
+    else:
+        lots = [tirer_candidats(s, reglages.candidats_par_situation, generateur)
+                for s in situations]
     largeur = max(len(candidats) for candidats, _ in lots)
 
     encodages = np.zeros((len(lots), largeur, TAILLE_ENCODAGE), dtype=np.float32)
@@ -337,7 +368,10 @@ def entrainer(
         else:
             lot = [situations[i] for i in generateur.integers(0, len(situations),
                                                               size=reglages.lot)]
-        encodages, masque, cibles, optimaux = preparer_lot(lot, reglages, generateur, peripherique)
+        notes = (noter_tous_les_candidats(modele, lot, peripherique)
+                 if reglages.tirage == "difficiles" else None)
+        encodages, masque, cibles, optimaux = preparer_lot(
+            lot, reglages, generateur, peripherique, notes)
 
         perte = perte_du_lot(modele, encodages, masque, cibles, optimaux, reglages.perte)
         optimiseur.zero_grad(set_to_none=True)
