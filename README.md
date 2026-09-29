@@ -1,5 +1,7 @@
 # Une mouche qui joue à Tetris
 
+[![tests](https://github.com/Rafi-Bettaieb/fruit_fly_tetris/actions/workflows/ci.yml/badge.svg)](https://github.com/Rafi-Bettaieb/fruit_fly_tetris/actions/workflows/ci.yml)
+
 Un réseau de neurones contraint par **le câblage mesuré du système nerveux
 central d'une drosophile mâle** — reconstruit au microscope électronique —, et
 entraîné à jouer à Tetris. La topologie ne bouge jamais : seules les forces des
@@ -10,10 +12,18 @@ connectome MaleCNS v1.0 · 165 122 neurones tracés · 25 563 197 connexions
 25 728 320 paramètres appris · 0 connexion ajoutée, retirée ou déplacée
 ```
 
-## Voir la mouche jouer
+![La page : la grille, le système nerveux pendant la décision, la mouche sur sa manette](docs/apercu.png)
 
-La page `web/index.html` s'ouvre directement dans un navigateur, sans serveur.
-Elle rejoue une partie enregistrée et montre, pour chaque pièce :
+## Voir le résultat, sans rien installer
+
+1. **Téléchargez le projet** : sur GitHub, bouton **Code → Download ZIP**, puis
+   décompressez — ou `git clone https://github.com/Rafi-Bettaieb/fruit_fly_tetris.git`.
+2. **Ouvrez `index.html`** dans votre navigateur, d'un double-clic.
+
+C'est tout : pas de Python, pas de serveur, pas de carte graphique particulière —
+un navigateur récent avec WebGL suffit (Chrome, Firefox, Edge, Safari), et la page
+fonctionne hors ligne. Elle rejoue une partie enregistrée du meilleur modèle à
+ce jour et montre, pour chaque pièce :
 
 - **la grille**, avec les trois placements les mieux notés et leurs probabilités ;
 - **le système nerveux pendant la décision** : 8 000 neurones du MaleCNS, chacun
@@ -23,12 +33,17 @@ Elle rejoue une partie enregistrée et montre, pour chaque pièce :
 - **la mouche sur sa manette**, dont les pattes appuient sur les touches — une
   suite reconstituée après coup à partir du placement choisi.
 
-Pour la voir jouer **en direct** sur la carte graphique (il faut le connectome
-préparé et un modèle entraîné) :
+Les boutons sous la mouche mettent en pause, avancent pièce par pièce et changent
+la vitesse ; on fait tourner la mouche et le système nerveux à la souris.
 
-```bash
-mouche diffuser --modele data/points_de_controle/<modèle>.pt   # puis http://localhost:8000
-```
+## Aller plus loin
+
+| Pour… | Il faut | Voir |
+|---|---|---|
+| **Voir le résultat** | un navigateur | ci-dessus |
+| **Lancer les tests** | Python ≥ 3.10 — ni carte graphique, ni données | [Tests](#tests) |
+| **Reproduire l'entraînement** | une carte NVIDIA de 4 Go, 1,2 Go de données, ~7 h 30 de calcul | [Reproduire](#reproduire-lentraînement) |
+| **Voir la mouche jouer en direct** | un modèle entraîné par vous : les modèles ne sont pas dans git, un fichier fait 98 Mio | [Reproduire](#reproduire-lentraînement) |
 
 ---
 
@@ -155,19 +170,31 @@ sur CPU.
 Les deux témoins doivent retomber au niveau du hasard. S'ils font mieux, rien de
 ce qui précède n'est interprétable.
 
-## Démarrer
+## Tests
 
 ```bash
 python -m venv .venv && source .venv/bin/activate
-pip install -e ".[connectome,serveur,dev]"
+pip install -e ".[modeles,serveur,dev]"
 
-pytest                    # 355 tests
-pytest -m "not lent"      # sans les entraînements de plusieurs minutes
+pytest -m "not connectome and not gpu"   # ce que lance l'intégration continue
+pytest -m "not lent and not connectome and not gpu"   # sans les entraînements de plusieurs minutes
 ```
 
 Les tests tournent **sans GPU et sans télécharger le connectome** : des graphes
 de 20 et 1 200 neurones sont construits en mémoire. C'est une contrainte de
-conception, pas une commodité.
+conception, pas une commodité — et c'est ce que vérifie l'intégration continue à
+chaque envoi, sous Python 3.10 et 3.12.
+
+## Reproduire l'entraînement
+
+Il faut une carte NVIDIA avec CUDA — tout a été mesuré sur une RTX 3050 de 4 Go —
+et les dépendances complètes :
+
+```bash
+pip install -e ".[connectome,serveur,dev]"
+```
+
+Puis, dans l'ordre :
 
 ```bash
 mouche telecharger          # les 3 fichiers MaleCNS (1,2 Go), et rien d'autre
@@ -234,6 +261,7 @@ tourner sans CUDA : une mise en veille coupe CUDA sans lever d'erreur
 | `src/mouche_tetris/evaluation/` | Parties appariées, bootstrap, accord avec l'expert |
 | `src/mouche_tetris/enregistrement/` | Parties enregistrées pour la page, maillage de la mouche |
 | `src/mouche_tetris/serveur/` | Le direct, et le verrou qui partage la carte avec l'entraînement |
+| `index.html` | La porte d'entrée : ouvre la page d'un double-clic |
 | `web/` | La page : grille, nuage de neurones, mouche 3D |
 
 Trois règles de dépendance tiennent l'architecture : le moteur n'importe jamais
