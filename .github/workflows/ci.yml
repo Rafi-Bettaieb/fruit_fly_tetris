@@ -19,8 +19,10 @@ jobs:
           python-version: ${{ matrix.python }}
           cache: pip
 
+      # `serveur` : le test du direct importe FastAPI. Sans lui, la collecte des
+      # tests échoue avant même de commencer — c'est arrivé sur 33feacf.
       - name: Installer
-        run: pip install -e ".[modeles,dev]"
+        run: pip install -e ".[modeles,serveur,dev]"
 
       - name: Style
         run: ruff check src tests
