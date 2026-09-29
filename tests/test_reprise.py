@@ -199,8 +199,10 @@ def test_la_garde_est_levee_meme_sur_exception():
     """Oubliée armée, elle tuerait un quart d'heure plus tard le processus qui
     a rattrapé l'exception — la suite de tests, par exemple.
 
-    Une garde d'une seconde, une exception pendant l'entraînement, puis trois
-    secondes d'attente : si la garde avait survécu, le processus serait mort.
+    Une garde de cinq secondes, une exception pendant l'entraînement, puis sept
+    secondes d'attente : si la garde avait survécu, le processus serait mort. Cinq
+    et non une : le premier pas d'un processus neuf, initialisation de PyTorch
+    comprise, dépasse parfois la seconde — et la garde l'arrêtait à bon droit.
     """
     import subprocess
     import sys
@@ -211,7 +213,7 @@ def test_la_garde_est_levee_meme_sur_exception():
         from mouche_tetris.entrainement import clonage, reprise
         from mouche_tetris.entrainement import demonstrations as d
         from mouche_tetris.modeles.lineaire import JugeLineaire
-        clonage.GARDE_SECONDES = 1
+        clonage.GARDE_SECONDES = 5
         situations = d.generer(range(0, 1), plafond=30)
         def planter(_session):
             raise RuntimeError("plantage simulé")
@@ -222,7 +224,7 @@ def test_la_garde_est_levee_meme_sur_exception():
                 bavard=False, session=reprise.Session(), sauvegarde=planter)
         except RuntimeError:
             pass
-        time.sleep(3)
+        time.sleep(7)
         print("vivant")
     """)
     resultat = subprocess.run([sys.executable, "-c", script], capture_output=True,
