@@ -9,8 +9,11 @@ Les échecs et les résultats négatifs figurent ici au même titre que les autr
 
 ## État
 
-Les deux bornes et le juge linéaire sont mesurés. La mouche, la mouche recâblée
-et les deux témoins restent à produire : ils attendent le MaleCNS.
+Les deux bornes et le juge linéaire sont mesurés. Le MaleCNS est préparé et le
+connectome apprend (mise au point ci-dessous) ; les essais de recette, faits à
+800 pas et mesurés sur tout le jeu de test, sont dans `conception.md` §10.3. Le
+run complet de la mouche, la mouche recâblée et les deux témoins restent à
+mesurer sur le protocole final.
 
 ## Tableau
 
