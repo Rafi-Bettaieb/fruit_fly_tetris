@@ -355,7 +355,7 @@ Mais cela donne à ce tirage aléatoire un rôle que le document ne lui prêtait
 |---|---|---|
 | Neurones sensoriels du lobe optique | Entrée : la grille | 4 114 |
 | Neurones moteurs de la corde nerveuse ventrale | Sortie : la note | 708 |
-| Sous-ensemble de neurones positionnés (soma), tiré une fois avec la graine du run | Visualisation | 20 000 |
+| Sous-ensemble de neurones positionnés (soma), tiré une fois avec la graine du run | Visualisation | 8 000 (13.2) |
 
 ### 7.6 Mesures à faire sur le graphe
 
@@ -745,7 +745,12 @@ Le tout tourne sur CPU, en quelques secondes à une minute par condition : la ph
 ### 13.2 Montrer la mouche qui réfléchit
 
 - **Pièces fantômes.** Les 3 meilleurs candidats s'affichent en transparence, chacun avec sa probabilité en pourcentage (softmax des notes).
-- **Nuage de neurones.** Les neurones de visualisation (section 7.5) sont affichés à la position de leur soma : 20 000 en local, 4 000 en public (13.3). Chaque point est coloré par son activité : orange si positive, bleu si négative, gris au repos ; chaque neurone est normalisé sur sa propre plage.
+- **Nuage de neurones — construit.** À côté de la grille, 8 000 neurones du MaleCNS à la position de leur soma, le cerveau en haut et la corde nerveuse ventrale en dessous (`connectome/nuage.py`, `web/lib/nuage3d.js`). Pour chaque pièce, la page anime **les K = 7 mises à jour** du réseau pour la grille choisie, avant les appuis — c'est l'ordre réel. Mesuré sur le modèle en recette corrigée : à la première mise à jour, seuls les neurones sensoriels sont actifs ; le cerveau s'allume ensuite ; les neurones moteurs de la corde nerveuse ne s'allument qu'à la cinquième (4 % au-delà de 20 % de leur plage), puis 78 % et 97 % aux deux dernières. Couleurs : orange si l'activité est positive, bleu si elle est négative, gris au repos ; chaque neurone est rapporté à sa propre plage, calibrée sur 64 grilles du jeu de test.
+  - *Composition.* Les 703 neurones moteurs qui ont un soma (5 des 708 n'en ont pas), 1 000 des 4 114 neurones sensoriels, 6 297 autres tirés au hasard — avec `graines.generateur_visualisation`, un flux distinct de celui du run. Un tirage uniforme ne garderait qu'une centaine de neurones d'entrée et de sortie : on ne verrait ni où la grille entre, ni où la note est lue.
+  - *Positions.* Le soma, pour 140 024 des 165 122 neurones. Les neurones sensoriels du lobe optique n'en ont pas (28 sur 4 114) : leur corps cellulaire est dans l'œil, hors du volume imagé. Ils sont placés au centre de leurs cibles, pondéré par le nombre de synapses — une position calculée, que la légende signale.
+  - *Garde-fou.* La page et le serveur comparent l'empreinte du tirage avant de colorer quoi que ce soit : une activité peinte sur les mauvais neurones ne lèverait aucune erreur.
+  - *Ce qui est écrit sous le nuage :* c'est l'état du modèle qui note la grille choisie, pas une mesure faite sur une vraie mouche.
+  - *Écart au plan d'origine.* Le document prévoyait 20 000 neurones en local et 4 000 en public, et l'état final seul en direct. Un seul tirage de 8 000 sert partout, et le direct transmet les K mises à jour — 56 Ko par pièce : l'état final seul ne montre rien de la décision, puisque 94 % des neurones sont actifs à la fin. La partie intégrée à la page est limitée à 60 pièces (`mouche enregistrer`), soit 3,4 Mo d'activité.
 - **Halo.** Son intensité suit la probabilité du candidat choisi.
 
 **La manette : une reconstitution, pas une commande.** La mouche choisit une position finale, jamais une suite de touches. Le moteur reconstitue donc après coup, pour l'affichage seul, la suite de touches qui mène à cette position :
@@ -778,7 +783,7 @@ Soit une douzaine d'appuis au plus. Ils s'allument sur la manette au rythme de 2
 - **Quelles graines de parties.** Une plage dédiée à partir de 3000, jamais utilisée ailleurs, et chaque partie diffusée est journalisée avec la sienne. N'importe quelle partie vue en public peut donc être rejouée à l'identique — y compris celle où la mouche a fait n'importe quoi.
 - **Quel plafond.** 500 pièces, comme le protocole final, pour que les lignes affichées à l'écran se comparent directement au tableau de résultats.
 
-**Ce que coûte un spectateur.** Par pièce : la grille en bits (25 octets), la pièce, les trois candidats fantômes et leurs probabilités (une cinquantaine d'octets), et le nuage de 4 000 neurones (4 000 octets). Soit environ 4 Ko par pièce, une pièce toutes les 0,3 s, donc **14 Ko/s par spectateur**. Vingt spectateurs tiennent dans 2,2 Mbit/s de débit montant, deux cents dans 22 Mbit/s.
+**Ce que coûte un spectateur.** Par pièce : la grille en bits (25 octets), la pièce, les trois candidats fantômes et leurs probabilités (une cinquantaine d'octets), et le nuage de 4 000 neurones (4 000 octets). Soit environ 4 Ko par pièce, une pièce toutes les 0,3 s, donc **14 Ko/s par spectateur**. Vingt spectateurs tiennent dans 2,2 Mbit/s de débit montant, deux cents dans 22 Mbit/s. *Mesuré depuis que le nuage est construit (13.2) : 74 Ko par pièce — les 7 mises à jour de 8 000 neurones —, une pièce toutes les 2,5 à 3,5 s, soit 20 à 30 Ko/s par spectateur. Ce budget est à reprendre avant d'ouvrir le direct public (étape K).*
 
 **Dégradation, dans l'ordre :**
 
