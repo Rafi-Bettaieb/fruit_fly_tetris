@@ -48,6 +48,8 @@ noyau attend.
 
 from __future__ import annotations
 
+from collections import deque
+
 import numpy as np
 import torch
 from torch import nn
@@ -140,18 +142,18 @@ class Mouche(nn.Module):
         """
         return encodages[:, self.lecture] * self.signe_entree * self.echelle_d_entree
 
-    def etats(self, encodages: torch.Tensor) -> torch.Tensor:
-        """L'état des neurones après K mises à jour, forme (lot, n_neurones).
+    def _mises_a_jour(self, encodages: torch.Tensor):
+        """Rend l'état de tous les neurones après chacune des K mises à jour.
 
-        Sert au réglage du facteur global et à la mesure de la participation
-        (§7.4, §7.6), et alimente le nuage de neurones de la démo (§13.2).
+        Forme (n_neurones, lot) : le noyau travaille dans cette disposition, qui
+        permet au produit creux de lire une colonne d'états par arête. Une seule
+        boucle sert à la note et à l'image : ce que la démo montre est
+        exactement ce qui a été calculé pour décider.
         """
         if encodages.dim() == 1:
             encodages = encodages.unsqueeze(0)
         lot = encodages.shape[0]
 
-        # Le noyau travaille en (neurones, lot) : c'est la disposition qui
-        # permet au produit creux de lire une colonne d'états par arête.
         etat = torch.zeros(self.graphe.n_neurones, lot, device=encodages.device)
         sensorielle = self.entree_sensorielle(encodages).T
         valeurs = self.poids_de_base * self.gains * self.facteur_global
@@ -161,8 +163,29 @@ class Mouche(nn.Module):
             entrees = ProduitCreuxParArete.apply(valeurs, self.crow, self.col, self.rows, etat)
             entrees = entrees.index_add(0, self.entrees, sensorielle)
             etat = (1 - fuite) * etat + fuite * torch.tanh(entrees)
+            yield etat
 
+    def etats(self, encodages: torch.Tensor) -> torch.Tensor:
+        """L'état des neurones après K mises à jour, forme (lot, n_neurones).
+
+        Sert au réglage du facteur global et à la mesure de la participation
+        (§7.4, §7.6).
+        """
+        # Seul le dernier état est gardé : retenir les K coûterait K fois la
+        # mémoire d'un état en jeu, environ 150 Mio de plus sur la carte.
+        (etat,) = deque(self._mises_a_jour(encodages), maxlen=1)
         return etat.T
+
+    @torch.no_grad()
+    def trajectoire(self, encodages: torch.Tensor, indices: torch.Tensor) -> torch.Tensor:
+        """L'état des neurones `indices` après chaque mise à jour, forme (lot, K, len(indices)).
+
+        C'est ce qu'anime le nuage de la démo (§13.2) : la vague qui part des
+        neurones sensoriels et atteint les neurones moteurs. Seuls les neurones
+        affichés sont gardés à chaque pas — les 165 122 à chacune des K mises à
+        jour ne serviraient à rien et pèseraient K fois plus.
+        """
+        return torch.stack([etat[indices].T for etat in self._mises_a_jour(encodages)], dim=1)
 
     def forward(self, encodages: torch.Tensor) -> torch.Tensor:
         """Une note par encodage, après K mises à jour depuis l'état nul."""

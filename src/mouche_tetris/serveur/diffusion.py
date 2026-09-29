@@ -64,9 +64,17 @@ donc près de deux secondes : avec la seule cadence, la pièce suivante arrivait
 avant que la patte ait fini d'appuyer, et l'on ne voyait jamais la rotation."""
 
 
+PAS_MISE_A_JOUR = 0.15
+"""Durée d'une des K mises à jour du réseau dans l'animation du nuage — la même
+que `ETAPE_NUAGE` côté navigateur. La page montre d'abord la vague qui traverse
+le réseau, puis les appuis : dans cet ordre, parce que c'est l'ordre réel — la
+note est calculée avant que la moindre touche ne soit reconstituée."""
+
+
 def attente_apres(coup: dict) -> float:
-    """Le temps de laisser la page montrer tous les appuis, puis la pose."""
-    return max(CADENCE, PAS_TOUCHE * len(coup["touches"]) + 0.6)
+    """Le temps de laisser la page montrer la réflexion, tous les appuis, puis la pose."""
+    reflexion = PAS_MISE_A_JOUR * coup["neurones"]["k"] if coup.get("neurones") else 0.0
+    return max(CADENCE, reflexion + PAS_TOUCHE * len(coup["touches"]) + 0.6)
 
 
 class Direct:
@@ -144,6 +152,10 @@ class Direct:
                 "total_lignes": lignes + choisi.lignes_completees,
                 "numero": posees + 1,
                 "graine": graine,
+                # Capacité facultative du Noteur : seul un modèle à état interne
+                # a quelque chose à montrer.
+                "neurones": (self.noteur.activite(choisi)
+                             if hasattr(self.noteur, "activite") else None),
             }
             self.dernier = coup
             self.historique.append(coup)
@@ -179,8 +191,10 @@ def construire(noteur, racine_web: Path, nom: str = "mouche"):
         try:
             # Un arrivant reçoit d'abord de quoi rattraper la partie en cours,
             # sinon il attend la cadence entière devant une grille vide.
+            description = getattr(direct.noteur, "description_du_nuage", None)
             await connexion.send_text(json.dumps({
                 "type": "bonjour", "nom": nom, "cadence": CADENCE,
+                "nuage": description() if description else None,
                 "rattrapage": direct.historique[-1:],
             }, ensure_ascii=False))
             while True:

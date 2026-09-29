@@ -88,16 +88,20 @@ def _cellules_posees(grille_avant, lettre: str, candidat) -> list[list[int]]:
     ]
 
 
-def capturer(partie: Partie, nom: str, etats_moteurs=None) -> dict[str, Any]:
+def capturer(partie: Partie, nom: str, noteur=None) -> dict[str, Any]:
     """Transforme une partie jouée en structure prête pour la page web.
 
-    `partie` doit avoir été jouée avec `enregistrer_coups=True`.
+    `partie` doit avoir été jouée avec `enregistrer_coups=True`. Si `noteur` sait
+    dire ce qui s'est activé pour le candidat choisi (`activite`, une capacité
+    facultative du `Noteur`), chaque coup porte aussi l'activité du nuage de
+    neurones ; sinon le champ reste vide et la page n'affiche pas le nuage.
     """
     if not partie.coups:
         raise ValueError("partie jouée sans enregistrer_coups=True : rien à capturer")
+    activite = getattr(noteur, "activite", None)
 
     pieces = []
-    for indice, coup in enumerate(partie.coups):
+    for coup in partie.coups:
         probabilites = _probabilites(coup.notes)
         meilleurs = np.argsort(-coup.notes)[:FANTOMES]
         choisi = coup.candidats[coup.choisi]
@@ -126,9 +130,7 @@ def capturer(partie: Partie, nom: str, etats_moteurs=None) -> dict[str, Any]:
                     }
                     for i in meilleurs
                 ],
-                "neurones": (
-                    _quantifier(etats_moteurs[indice]) if etats_moteurs is not None else None
-                ),
+                "neurones": activite(choisi) if activite else None,
             }
         )
 
@@ -144,20 +146,9 @@ def capturer(partie: Partie, nom: str, etats_moteurs=None) -> dict[str, Any]:
             "choisit la meilleure. La suite de touches est reconstituée après coup, "
             "pour l'image."
         ),
+        "nuage": noteur.description_du_nuage() if activite else None,
         "coups": pieces,
     }
-
-
-def _quantifier(etats: np.ndarray) -> list[int]:
-    """Un octet par neurone, échelle propre à chacun (§13.5).
-
-    Chaque neurone est normalisé sur sa propre plage : sans cela, les quelques
-    neurones très actifs écraseraient tous les autres et le nuage paraîtrait
-    éteint.
-    """
-    etats = np.asarray(etats, dtype=np.float64)
-    amplitude = np.abs(etats).max() or 1.0
-    return np.clip(np.round(etats / amplitude * 127) + 128, 0, 255).astype(int).tolist()
 
 
 def ecrire(capture: dict[str, Any], chemin: Path) -> Path:

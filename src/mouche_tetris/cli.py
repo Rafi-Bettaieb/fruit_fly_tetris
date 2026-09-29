@@ -9,6 +9,7 @@
     mouche entrainer-mouche     # le run complet : clonage + 3 tours de DAgger
     mouche avancement           # où en est le run, sans toucher à la carte
     mouche comparer-recettes    # les deux corrections de §10.3 contre la recette du document
+    mouche enregistrer --modele M  # une partie de M, avec l'activité de ses neurones
     mouche page                 # met la dernière partie enregistrée dans web/index.html
     mouche diffuser             # la mouche joue EN DIRECT, sur http://localhost:8000
     mouche reperes              # hasard et expert sur le protocole final
@@ -460,7 +461,8 @@ def commande_entrainer_mouche(args) -> int:
         print(f"\ndéveloppement : {dev.moyenne:.1f} lignes, {dev.pieces_moyennes:.0f} pièces "
               f"({time.perf_counter() - debut:.0f} s)")
 
-        partie = jouer(noteur, graine=1000, plafond=args.plafond, enregistrer_coups=True)
+        partie = jouer(noteur, graine=1000, plafond=args.plafond or 300,
+                       enregistrer_coups=True)
         titre = f"mouche · {session.budget_clonage} pas"
         capture = capturer(partie, f"{titre} + DAgger" if session.avec_dagger else titre)
         ecrire(capture, Path("data/enregistrements/mouche.json.gz"))
@@ -656,11 +658,40 @@ def commande_page(args) -> int:
     # « </ » fermerait la balise <script> si une chaîne le contenait.
     donnees = json.dumps(capture, ensure_ascii=False, separators=(",", ":")).replace("</", "<\\/")
     lignes[rangs[0]] = f"let P = {donnees};"
+
+    # Les positions du nuage de neurones, pour la partie intégrée comme pour le
+    # direct : la page s'ouvre en fichier local, où elle ne peut rien charger.
+    import base64
+
+    from .connectome import nuage as nu
+
+    description = capture.get("nuage") or {}
+    fichier_nuage = nu.chemin(int(description.get("graine_run", args.graine)))
+    if fichier_nuage.exists():
+        nuage = nu.charger(fichier_nuage)
+        if description and description["empreinte"] != nuage.empreinte():
+            print(f"{source} a été enregistrée avec un autre nuage que {fichier_nuage} : "
+                  f"rien n'est modifié")
+            return 1
+        balise = ('<script id="nuage" type="text/plain">'
+                  + base64.b64encode(nu.pour_la_page(nuage)).decode("ascii") + "</script>")
+        existante = [i for i, ligne in enumerate(lignes) if ligne.startswith('<script id="nuage"')]
+        if existante:
+            lignes[existante[0]] = balise
+        else:
+            maillage = next(i for i, ligne in enumerate(lignes)
+                            if ligne.startswith('<script id="maillage"'))
+            lignes.insert(maillage + 1, balise)
+        print(f"  nuage : {nuage.n} neurones {nuage.composition()} · empreinte {nuage.empreinte()}")
+    else:
+        print(f"  pas de nuage ({fichier_nuage} absent) : la page s'affichera sans lui")
+
     provisoire = page.with_name(page.name + ".provisoire")
     provisoire.write_text("\n".join(lignes), encoding="utf-8")
     provisoire.replace(page)
     print(f"{page} : « {capture['nom']} », {len(capture['coups'])} coups, "
-          f"{capture['lignes']} lignes — depuis {source}")
+          f"{capture['lignes']} lignes — depuis {source} "
+          f"({page.stat().st_size / 2**20:.1f} Mio)")
     return 0
 
 
@@ -670,16 +701,10 @@ def commande_diffuser(args) -> int:
     Une seule partie tourne, diffusée à tous les navigateurs connectés : le coût
     GPU est constant, qu'il y ait un spectateur ou mille.
     """
-    import pickle
 
     import torch
     import uvicorn
 
-    from .connectome.construction import PREPARE_GRAPHE
-    from .connectome.facteur import MESURE_MALECNS
-    from .connectome.modele import Mouche
-    from .entrainement.clonage import restaurer_parametres
-    from .modeles.torche import NoteurTorch
     from .serveur import verrou_gpu
     from .serveur.diffusion import construire
 
@@ -698,17 +723,94 @@ def commande_diffuser(args) -> int:
 
     try:
         peripherique = "cuda" if torch.cuda.is_available() else "cpu"
-        with PREPARE_GRAPHE.open("rb") as fichier:
-            graphe = pickle.load(fichier)
-        distance, _ = graphe.distance_aux_sorties()
-        mouche = Mouche(graphe, k=min(distance + 4, 16),
-                        facteur_global=MESURE_MALECNS, graine_run=0)
-        restaurer_parametres(mouche, torch.load(modele, map_location="cpu"))
-        noteur = NoteurTorch(mouche, modele.stem, peripherique)
-        print(f"modèle : {modele.name} · {peripherique} · K = {mouche.k}")
+        noteur, nuage = _mouche_qui_montre_son_activite(modele, peripherique)
+        print(f"modèle : {modele.name} · {peripherique} · K = {noteur.modele.k}")
+        print(f"nuage : {nuage.n} neurones {nuage.composition()} · empreinte {nuage.empreinte()}")
         print(f"\n  ouvrez http://{args.hote}:{args.port}\n")
         uvicorn.run(construire(noteur, Path("web"), modele.stem),
                     host=args.hote, port=args.port, log_level="warning")
+    finally:
+        verrou_gpu.rendre()
+    return 0
+
+
+def _mouche_qui_montre_son_activite(modele: Path, peripherique: str):
+    """Charge un modèle entraîné et l'équipe de son nuage de neurones (§13.2).
+
+    Rend un `NoteurAvecNuage` : il note comme n'importe quel noteur, et sait en
+    plus rendre l'activité des neurones affichés pour le candidat choisi. La
+    plage de chaque neurone est calibrée sur 64 grilles du jeu de test — les
+    choix de l'expert, étalés sur les 20 parties.
+    """
+    import pickle
+
+    import torch
+
+    from .connectome import nuage as nu
+    from .connectome.construction import PREPARE_GRAPHE
+    from .connectome.facteur import MESURE_MALECNS
+    from .connectome.modele import Mouche
+    from .entrainement import demonstrations as d
+    from .entrainement.clonage import restaurer_parametres
+
+    etat = torch.load(modele, map_location="cpu", weights_only=False)
+    # Deux formats : les paramètres seuls, ou — pour les modèles des essais de
+    # recette — un dictionnaire qui les porte avec leur recette et leur graine.
+    avec_details = "parametres" in etat
+    graine_run = int(etat.get("graine_run", 0)) if avec_details else 0
+
+    with PREPARE_GRAPHE.open("rb") as fichier:
+        graphe = pickle.load(fichier)
+    distance, _ = graphe.distance_aux_sorties()
+    mouche = Mouche(graphe, k=min(distance + 4, 16), facteur_global=MESURE_MALECNS,
+                    graine_run=graine_run)
+    restaurer_parametres(mouche, etat["parametres"] if avec_details else etat)
+    mouche = mouche.to(peripherique)
+
+    nuage = nu.obtenir(graphe, graine_run)
+    test = _charger_ou_generer("test", d.jeu_de_test)
+    calibration = [s.candidats[s.choix_expert] for s in test[:: max(1, len(test) // 64)][:64]]
+    activite = nu.Activite(mouche, nuage, calibration, peripherique)
+    return nu.NoteurAvecNuage(mouche, modele.stem, peripherique, activite), nuage
+
+
+def commande_enregistrer(args) -> int:
+    """Fait jouer une partie au modèle, avec l'activité de son nuage, pour la page.
+
+    Graine 1000, comme la partie enregistrée en fin de run. Par défaut 60 pièces
+    au plus : chacune pèse 56 Ko d'activité (8 000 neurones × 7 mises à jour), et
+    la page embarque la partie entière pour s'ouvrir sans serveur.
+    """
+    import torch
+
+    from .enregistrement.capture import capturer, ecrire
+    from .serveur import verrou_gpu
+    from .tetris.partie import jouer
+
+    if not args.modele or not Path(args.modele).exists():
+        print("--modele : le point de contrôle à faire jouer")
+        return 1
+    if not torch.cuda.is_available():
+        print("CUDA indisponible — voir « mouche entrainer-mouche » pour le rétablir.")
+        return 1
+    try:
+        verrou_gpu.prendre("enregistrement")
+    except verrou_gpu.GpuOccupe as erreur:
+        print(erreur)
+        return 1
+    try:
+        modele = Path(args.modele)
+        noteur, nuage = _mouche_qui_montre_son_activite(modele, "cuda")
+        plafond = args.plafond or 60
+        debut = time.perf_counter()
+        partie = jouer(noteur, graine=1000, plafond=plafond, enregistrer_coups=True)
+        capture = capturer(partie, f"{modele.stem} · graine 1000", noteur)
+        chemin = ecrire(capture, Path("data/enregistrements/mouche.json.gz"))
+        print(f"partie : {partie.lignes} ligne(s), {partie.pieces_posees} pièces"
+              + (f" (plafond de {plafond} atteint)" if partie.plafond_atteint else "")
+              + f" · {time.perf_counter() - debut:.0f} s")
+        print(f"  {chemin} ({chemin.stat().st_size / 2**20:.1f} Mio) · nuage {nuage.n} neurones")
+        print("  « mouche page » pour la mettre dans la page")
     finally:
         verrou_gpu.rendre()
     return 0
@@ -725,6 +827,7 @@ COMMANDES = {
     "entrainer-mouche": commande_entrainer_mouche,
     "avancement": commande_avancement,
     "comparer-recettes": commande_comparer_recettes,
+    "enregistrer": commande_enregistrer,
     "page": commande_page,
     "diffuser": commande_diffuser,
 }
@@ -756,7 +859,7 @@ def main(argv: list[str] | None = None) -> int:
     analyseur.add_argument("--reference", default=None,
                            help="comparer-recettes : modèle de référence "
                                 "(défaut : recette du document)")
-    analyseur.add_argument("--plafond", type=int, default=300,
+    analyseur.add_argument("--plafond", type=int, default=None,
                            help="plafond de pièces enregistrées")
     analyseur.add_argument("--modele", help="point de contrôle à diffuser")
     analyseur.add_argument("--partie", help="partie enregistrée à mettre dans la page")

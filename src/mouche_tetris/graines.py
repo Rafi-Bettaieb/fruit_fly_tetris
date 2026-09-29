@@ -60,6 +60,20 @@ def generateur_run(graine_run: int) -> np.random.Generator:
     return np.random.default_rng(graine_run)
 
 
+_FLUX_VISUALISATION = 2_000_000_011
+
+
+def generateur_visualisation(graine_run: int) -> np.random.Generator:
+    """Le tirage des neurones affichés dans le nuage de la démo (§7.5, §13.2).
+
+    Il dépend de la graine du run — changer de graine change aussi les neurones
+    montrés — mais c'est un flux à part : le tirer sur `generateur_run` aurait
+    rejoué les premiers tirages des interfaces, et le nuage aurait été corrélé à
+    la projection d'entrée sans que personne l'ait voulu.
+    """
+    return np.random.default_rng(graine_run + _FLUX_VISUALISATION)
+
+
 def generateur_analyse(graine: int = 0) -> np.random.Generator:
     """Le flux du bootstrap, et de lui seul.
 
