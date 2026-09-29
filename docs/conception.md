@@ -546,6 +546,25 @@ L'expert note chaque grille résultante avec 4 critères, puis joue le placement
 
 **Règle d'adoption.** Adoptée seulement si l'intervalle exclut zéro, et alors pour **toutes** les conditions — la mouche recâblée en premier, sans quoi la comparaison qui porte la question du projet ne tient plus. Une séance commencée dans une recette la garde jusqu'au bout : le fichier de séance l'enregistre et refuse d'en changer.
 
+**Résultat, mesuré le 22 septembre 2026 — adoptée.**
+
+| 800 pas, graine 0 | Recette du document | Recette corrigée |
+|---|---|---|
+| Accord, échantillon de 500 (meilleur point) | 55,0 % | 60,0 % |
+| **Accord, jeu de test complet (5 998 situations, 20 parties)** | **53,9 %** | **57,2 %** |
+| Écart, IC à 95 % tiré par parties | | **+3,3 points [+2,1 ; +4,3]** |
+
+L'intervalle exclut zéro : la recette corrigée devient celle du projet. Le run de la mouche repart de zéro dans cette recette ; le run en recette du document, arrêté au pas 1 400, est conservé tel quel comme trace.
+
+**Ce que ce résultat ne dit pas.**
+
+- **Laquelle des deux corrections compte.** Elles ont été essayées ensemble ; séparer leurs effets demanderait deux essais de plus. Le projet n'en a pas besoin pour décider, mais il ne peut pas en dire plus.
+- **Ce qui se passe d'une graine à l'autre.** Une seule graine ; l'intervalle mesure le bruit entre parties, pas celui de l'optimisation (11.1).
+- **Le gain à 2 400 pas.** L'essai faisait décroître le taux sur 800 pas ; le run le fait sur 2 400. L'écart final se mesurera sur le run lui-même.
+- **Le gain en lignes par partie.** L'accord n'est pas le but ; à 800 pas de clonage, sans DAgger, les deux modèles jouent trop mal pour qu'une évaluation en parties tranche.
+
+L'échantillon de 500 surestimait les deux modèles — 55,0 et 60,0 % contre 53,9 et 57,2 % sur le jeu complet — ce qui est attendu d'un meilleur point choisi sur ce même échantillon : c'est pourquoi la décision se prend sur le jeu complet.
+
 ### 10.4 DAgger
 
 - **Trois tours.** Graines 2000–2029, puis 2100–2129, puis 2200–2229.

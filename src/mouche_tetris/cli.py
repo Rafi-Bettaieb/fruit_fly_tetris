@@ -541,9 +541,17 @@ def commande_comparer_recettes(args) -> int:
               f"{session.avancement()}\n")
 
         if not session.terminee:
+            # Les mêmes points de contrôle que la référence, pas ceux que donnerait
+            # le budget de l'essai : la référence, tirée d'un run de 2 400 pas, a
+            # choisi son meilleur point parmi 200, 400, 600 et 800. L'intervalle
+            # d'un run de 800 pas serait de 133 — sept candidats contre quatre,
+            # donc plus de chances de tomber sur un bon point par hasard.
+            intervalle = reference["accords"][0][0]
             reglages = clonage.Reglages(
-                mises_a_jour=pas, point_de_controle_tous_les=min(200, max(50, pas // 6)),
+                mises_a_jour=pas, point_de_controle_tous_les=intervalle,
                 perte=session.perte, taux_final=session.taux_final)
+            print(f"  points de contrôle tous les {intervalle} pas, comme la référence : "
+                  f"{[p for p, _ in reference['accords']]}")
             mouche, session = reprise.poursuivre(
                 mouche, lambda m: NoteurTorch(m, "essai", peripherique),
                 entrainement, echantillon, session, reglages=reglages,
